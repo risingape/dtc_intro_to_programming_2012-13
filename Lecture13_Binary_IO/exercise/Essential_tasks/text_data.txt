@@ -1,0 +1,10 @@
+Taken from Bionumbers (http://bionumbers.hms.harvard.edu/bionumber.aspx?&id=103185&ver=4&trm=)
+ID	103185
+Property	 Number of neurons and glial cells in neocortex
+Organism	 Human Homo sapiens
+Value	 ~5e+10
+Units	 cells
+Reference	 Pelvig DP, Pakkenberg H, Stark AK, Pakkenberg B. Neocortical glial cell numbers in human brains. Neurobiol Aging. 2008 Nov29(11):1754-62.
+Reference PubMed ID	17544173
+Method	 The tissue was embedded in paraffin wax. Four-micrometer-thick sections were cut from all blocks for H&E stains, and for immunohistochemistry in selected areas.
+Comments	 Female brain. Of these 21.4 billion neurons and 27.9 billion glial cells. For 10^12 glia cells in brain see Vickaryous et al., 2006 PMID 16790079 p.431 right column 3rd paragraph

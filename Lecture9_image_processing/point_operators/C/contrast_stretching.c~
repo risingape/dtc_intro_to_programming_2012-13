@@ -1,0 +1,259 @@
+/*
+ * Point operators
+ * Contrast stretching and histogram equalisation examples.
+ *
+ * To compile it use:
+ * gcc contrast_stretching.c pgm_routines.c -o point_operators -I . -lm
+ */
+
+/* TODO:
+ * re-write code to allocate histogram
+ * example images
+ */
+ 
+/* system includes */
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+
+/* include our PGM routines */
+#include "image_p2.h"
+
+
+//temporary definitions - these should be parameters
+#define CONTRAST_STRETCH_ALPHA 0.5f
+#define CONTRAST_STRETCH_BETA 2.0f
+#define CONTRAST_STRETCH_GAMMA 1.0f
+#define CONTRAST_STRETCH_A 170
+#define CONTRAST_STRETCH_B 185
+
+
+/* Define a simple histogram data type.
+ * We simply assume there are the same number
+ * of bins as there are grey levels.
+ */
+typedef struct {
+    unsigned int uint_num_bins;
+    unsigned int* uint_bins;
+} histogram;
+ 
+
+int contrast_stretch(image* image_in, float float_alpha, float float_beta, float float_gamma, unsigned int uint_a, unsigned int uint_b) {
+    int i = 0;
+    int j = 0;
+    unsigned int uint_va = 0.0f;
+    unsigned int uint_vb = 0.0f;
+
+    /* sanity check on the parameters */
+    if(float_alpha <= 0.0f || float_beta <= 0 || float_gamma <= 0 || uint_b < uint_a) {
+        return(-1);
+    }
+
+    for(i = 0; i < image_in->uint_yres; i ++) {
+        for(j = 0; j < image_in->uint_xres; j ++) {
+            
+            uint_va = (unsigned int)(float_alpha * uint_a + 0.5f);
+            uint_vb = uint_va + (unsigned int)(float_beta * (uint_b - uint_a) + 0.5f);
+
+            if(image_in->int_image_data[i][j] < uint_a) {
+                image_in->int_image_data[i][j] = (int)(float_alpha * image_in->int_image_data[i][j] + 0.5f);            
+            } else if(image_in->int_image_data[i][j] < uint_b) {
+                image_in->int_image_data[i][j] = (int)(float_beta * (image_in->int_image_data[i][j] - uint_a) + 0.5f) + uint_va;
+            } else {
+                image_in->int_image_data[i][j] = (int)(float_gamma * (image_in->int_image_data[i][j] - uint_b) + 0.5f) + uint_vb;
+            }
+
+            /* clip any illegal values */
+            if(image_in->int_image_data[i][j] > 255) image_in->int_image_data[i][j] = 255;
+            if(image_in->int_image_data[i][j] < 0) image_in->int_image_data[i][j] = 0;
+        }
+    }
+
+    return(0);
+}
+
+
+/* Compute the histogram.
+ * For simplicity whe assume that there are as many bins as grey levels.
+ */
+void compute_histogram(image* image_in, histogram* histogram_data) {
+    int i = 0;
+    int j = 0;
+
+    histogram_data->uint_num_bins = image_in->uint_max;
+   
+    for(i = 0; i < image_in->uint_yres; i ++) {
+        for(j = 0; j < image_in->uint_xres; j ++) {
+                histogram_data->uint_bins[image_in->int_image_data[i][j]] ++;
+        }
+    }
+
+    return;
+}
+
+
+void free_histogram(histogram* histogram_data) {
+    free(histogram_data->uint_bins);
+}
+
+
+/* histogram equalisation
+ */
+void equalise_histogram(image* image_in, histogram* histogram_in) {
+    int i = 0;
+    int j = 0;
+    unsigned int uint_min = 0;
+    unsigned int uint_num_pixels = 0;
+    unsigned int* uint_prefix_sums;
+    float float_v = 0.0f;
+
+    /* We know the maximum grey level, lets find the minimum one.
+     * We do not have to scan the imgae, we simple read it from 
+     * from the histogram.
+     */
+    while(histogram_in->uint_bins[uint_min] == 0) {
+        uint_min ++;
+    }
+    
+    printf("min: %d\n", uint_min);
+
+    /* compute the prefix sums */
+    uint_prefix_sums = (unsigned int*)malloc(histogram_in->uint_num_bins * sizeof(unsigned int));
+    uint_prefix_sums[0] = histogram_in->uint_bins[0];
+    for(i = 1; i < histogram_in->uint_num_bins; i ++) {
+        uint_prefix_sums[i] = uint_prefix_sums[i - 1] + histogram_in->uint_bins[i - 1];
+    }
+
+    uint_num_pixels = image_in->uint_xres * image_in->uint_yres;
+
+    for(i = 0; i < image_in->uint_yres; i ++) {
+        for(j = 0; j < image_in->uint_xres; j ++) {
+            float_v = (float)uint_prefix_sums[ image_in->int_image_data[i][j] ];
+            image_in->int_image_data[i][j] = (unsigned int)((float_v - (float)uint_min) / (uint_num_pixels - (float)uint_min) * (image_in->uint_max - 1.0f) + 0.5f);
+        }
+    }
+
+    free(uint_prefix_sums);
+
+    return;
+}
+
+
+void histogram_to_image(histogram* histogram_in, char* char_name, unsigned int uint_yres) {
+    int i = 0;
+    int j = 0;
+    unsigned int uint_max = 0;
+    unsigned int uint_height = 0;
+    image image_out;
+
+    printf("histogram to image, allocate, x (number of  bins): %d, y: %d\n", histogram_in->uint_num_bins, uint_yres);
+    allocate_image_p2(&image_out, histogram_in->uint_num_bins, uint_yres, 255); 
+
+    /* Find the max histogram value. We need this to fit the histogram
+     * into the image height uint_yres.
+     */
+    uint_max = histogram_in->uint_bins[0];
+    for(i = 1; i < histogram_in->uint_num_bins; i ++) {
+        if(histogram_in->uint_bins[i] > uint_max) {
+            uint_max = histogram_in->uint_bins[i];
+        }
+    }
+    printf("histogram to image, max: %d\n", uint_max);
+ 
+    float float_increment = (float)(uint_max) / uint_yres;
+
+    for(i = 0; i < histogram_in->uint_num_bins; i ++) {
+        uint_height = (unsigned int)(histogram_in->uint_bins[i] / float_increment + 0.5f);
+        for(j = uint_yres - 1; j > uint_yres - uint_height; j --) {
+            //printf("j: %d, i: %d\n", j, i);
+            image_out.int_image_data[j][i] = 0;
+        }
+    }
+    
+    printf("histogram to image, write to file.\n");
+    write_image_p2(char_name, &image_out);
+
+    printf("histogram to image, free image.\n");
+    free_image_p2(&image_out);
+
+    return;
+}
+
+
+int main(int argc, char *argv[]) {
+    int i = 0;
+    image image_input;
+    image image_output;
+    histogram histogram_input;
+
+    /* We expect the file name in argv[1],
+     * otherwise print a meaningful message
+     * and exit with an error number set.
+     */
+    if( argc != 2 ) {
+        perror("Usage: histogram <infilename>\n");
+        exit(1);
+    }
+ 
+    /* Get the length of the input filename.
+     * We need it later on to create the 
+     * output file name.
+     */
+    size_t size_t_name_length = strlen(argv[1]);
+
+    /* Read the image into a image data structure.
+     * All the file handling and memory allocation
+     * is done by read_image_p2().
+     */
+    read_image_p2(argv[1], &image_input);
+
+    /* clone the input image since our point operator implementation
+     * overwrites the input image.
+     */
+    printf("before clone image\n");
+    clone_image_p2(&image_input, &image_output);
+
+    /* allocate some buffer space for the histogram */
+    printf("Allocate histogram data.\n");
+    histogram_input.uint_bins = (unsigned int*)malloc(image_input.uint_max * sizeof(unsigned int));
+    memset(histogram_input.uint_bins, 0 , image_input.uint_max * sizeof(unsigned int));
+
+    printf("before compute histogram.\n");
+    // compute and display histogram
+    compute_histogram(&image_input, &histogram_input);
+    printf("before display histogram.\n");
+    histogram_to_image(&histogram_input, "histogram_unmodified.pgm", 200);
+
+    // perform a histogram stretch
+    printf("before contrast stretch.\n");
+    contrast_stretch(&image_output, CONTRAST_STRETCH_ALPHA, CONTRAST_STRETCH_BETA, CONTRAST_STRETCH_GAMMA, CONTRAST_STRETCH_A, CONTRAST_STRETCH_B);
+    printf("before compute histogram.\n");
+    memset(histogram_input.uint_bins, 0 , image_input.uint_max * sizeof(unsigned int));
+    compute_histogram(&image_output, &histogram_input);
+    printf("before write histogram to image.\n");
+    histogram_to_image(&histogram_input, "histogram_stretched.pgm", 200);
+
+    /* write the stretched image to file */
+    write_image_p2("contrast_stretch.pgm", &image_output);
+
+    // perform histogram equalisation
+    equalise_histogram(&image_output, &histogram_input);
+    write_image_p2("equalised.pgm", &image_output);
+
+    // compute and display histogram
+    memset(histogram_input.uint_bins, 0 , image_output.uint_max * sizeof(unsigned int));
+    compute_histogram(&image_output, &histogram_input);
+    histogram_to_image(&histogram_input, "histogram_equalised.pgm", 200);
+
+    // clean-up
+    free_image_p2(&image_input);
+    free_image_p2(&image_output);
+    //free_histogram(&histogram_input);
+    //free_histogram(&histogram_output);
+
+    return(0);
+}
+
+
+
